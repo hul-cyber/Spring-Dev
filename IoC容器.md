@@ -319,3 +319,694 @@ MailService mailService = factory.getBean(MailService.class);
 1. Spring的IoC容器接口是ApplicationContext，并提供了多种实现类；
 2. 通过XML配置文件创建IoC容器时，使用ClassPathXmlApplicationContext；
 3. 持有IoC容器后，通过getBean()方法获取Bean的引用。
+
+## 使用Annotation配置
+使用Spring的IoC容器，实际上就是通过类似XML这样的配置文件，把我们自己的Bean的依赖关系描述出来，然后让容器来创建并装配Bean。一旦容器初始化完毕，我们就直接从容器中获取Bean使用它们。
+使用XML配置的优点是所有的Bean都能一目了然地列出来，并通过配置注入能直观地看到每个Bean的依赖。它的缺点是写起来非常繁琐，每增加一个组件，就必须把新的Bean配置到XML中。
+有没有其他更简单的配置方式呢？
+有！我们可以使用Annotation配置，可以完全不需要XML，让Spring自动扫描Bean并组装它们。
+我们把上一节的示例改造一下，先删除XML配置文件，然后，给`UserService`和`MailService`添加几个注解。
+首先，我们给`MailService`添加一个`@Component`注解：
+```java
+@Component
+public class MailService {
+    ...
+}
+```
+这个`@Component`注解就相当于定义了一个Bean，它有一个可选的名称，默认是`mailService`，即小写开头的类名。
+然后，我们给`UserService`添加一个`@Component`注解和一个`@Autowired`注解：
+```java
+@Component
+public class UserService {
+    @Autowired
+    MailService mailService;
+
+    ...
+}
+```
+使用`@Autowired`就相当于把指定类型的Bean注入到指定的字段中。和XML配置相比，`@Autowired`大幅简化了注入，因为它不但可以写在`set()`方法上，还可以直接写在字段上，甚至可以写在构造方法中：
+```java
+@Component
+public class UserService {
+    MailService mailService;
+
+    public UserService(@Autowired MailService mailService) {
+        this.mailService = mailService;
+    }
+    ...
+}
+```
+我们一般把`@Autowired`写在字段上，通常使用package权限的字段，便于测试。
+最后，编写一个`AppConfig`类启动容器：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        UserService userService = context.getBean(UserService.class);
+        User user = userService.login("bob@example.com", "password");
+        System.out.println(user.getName());
+    }
+}
+```
+除了`main()`方法外，`AppConfig`标注了`@Configuration`，表示它是一个配置类，因为我们创建`ApplicationContext`时：
+```java
+ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+```
+使用的实现类是`AnnotationConfigApplicationContext`，必须传入一个标注了`@Configuration`的类名。
+此外，`AppConfig`还标注了`@ComponentScan`，它告诉容器，自动搜索当前类所在的包以及子包，把所有标注为`@Component`的Bean自动创建出来，并根据`@Autowired`进行装配。
+整个工程结构如下:
+```
+spring-ioc-annoconfig
+├── pom.xml
+└── src
+    └── main
+        └── java
+            └── com
+                └── itranswarp
+                    └── learnjava
+                        ├── AppConfig.java
+                        └── service
+                            ├── MailService.java
+                            ├── User.java
+                            └── UserService.java
+```
+使用Annotation配合自动扫描能大幅简化Spring的配置，我们只需要保证：
+每个Bean被标注为`@Component`并正确使用`@Autowired`注入；
+配置类被标注为`@Configuration`和`@ComponentScan`；
+所有Bean均在指定包以及子包内。
+使用`@ComponentScan`非常方便，但是，我们也要特别注意包的层次结构。通常来说，启动配置`AppConfig`位于自定义的顶层包（例如`com.itranswarp.learnjava`），其他Bean按类别放入子包。
+在这里我们补充一个新的知识点:
+为什么在Spring中不推荐使用`@Autowired`字段注入?
+### Spring的三种依赖注入方式
+1. 构造函数注入(比较推荐这种方式)
+```java
+private DependencyA dependencyA;
+private DependencyB dependencyB;
+private DependencyC dependencyC;
+
+@Autowired
+public DI(DependencyA dependencyA, DependencyB dependencyB, DependencyC dependencyC) {
+    this.dependencyA = dependencyA;
+    this.dependencyB = dependencyB;
+    this.dependencyC = dependencyC;
+}
+```
+2. Setter或者其它方式注入
+```java
+private DependencyA dependencyA;
+private DependencyB dependencyB;
+private DependencyC dependencyC;
+
+@Autowired
+public void setDependencyA(DependencyA dependencyA) {
+    this.dependencyA = dependencyA;
+}
+
+@Autowired
+public void setDependencyB(DependencyB dependencyB) {
+    this.dependencyB = dependencyB;
+}
+
+@Autowired
+public void setDependencyC(DependencyC dependencyC) {
+    this.dependencyC = dependencyC;
+}
+```
+3. 字段注入,不推荐
+```java
+@Autowired
+private DependencyA dependencyA;
+
+@Autowired
+private DependencyB dependencyB;
+
+@Autowired
+private DependencyC dependencyC;
+```
+这三种其实都可以使用 @Autowired 注解，只是注解修饰的是构造函数，方法，还是字段.
+#### 字段注入的缺点:
+1. 违反单一责任原则: 使用字段注入,过于容易,可以为一个类增加过多的依赖,但是如果采用使用构造参数,会因为构造参数的参数过多,而让我们发现这种情况,避免一个类背负太多的责任。
+2. 依赖隐藏: 使用DI容器意味着类不再负责管理它的依赖关系,获取依赖的责任被从类中分离了出来,一些其它的东西负责提供依赖,当类不再负责获取他的依赖的时候,应该使用公共接口--方法或者构造函数来清楚地传达他们,这样可以清楚地知道类的要求,也可以知道**类的要求是可选的(setter)还是强制的(constructors)**.
+这里我有**新的理解,**比如下面的代码:
+首先我们在`AppConfig.java`构造了两个`Bean`。
+```java
+   @Bean
+   @Primary
+   @Qualifier("z")
+   ZoneId createZoneOfZ() {
+       return ZoneId.of("Z");
+   }
+
+   @Bean
+   @Qualifier("utc8")
+   ZoneId createZoneOfUTC8() {
+       return ZoneId.of("UTC+08:00");
+   }
+```
+我们在文件`MailService`中使用他们,需要为`MailService`注入上面两个组件:
+如果我们使用构造函数注入:
+```java
+@Autowired
+public MailService(ZoneId zoneId) {
+    this.zoneId = zoneId;
+}
+```
+如果我们使用Setter注入:
+```java
+@Autowired
+public void setZoneId(ZoneId zoneId) {
+    this.zoneId = zoneId;
+}
+```
+上面两种方式的运行结果是相同的, 但是如果我们将上面的两个`Bean`删除掉,也就是我们不需要必须使用上面的两个对象。也就是说我们希望这两个`Bean`不是必须的,那么我们能够使用`@Autowired(required = false)`,也就是使用可选注入,那么上面的代码写法变成了:
+```java
+@Autowired(required = false)
+public void setZoneId(ZoneId zoneId) {
+    this.zoneId = zoneId;
+}
+```
+```java
+@Autowired(required = false)
+public MailService(@Autowired(required = false) ZoneId zoneId) {
+    this.zoneId = zoneId;
+}
+```
+注意我们`ZoneId`的变量被提前定义:
+```java
+ZoneId zoneId = ZoneId.systemDefault();
+```
+事实上,上面两个的运行结果是完全不相同的,Setter会把时区Id设置成默认值,但是构造函数注入的方式会把时区Id设置为空。我的理解是Setter的这种注入是可选的,如果找不到`Bean`,那么就使用原来的值,但是构造函数注入的方式不是可选的,即使找不到`Bean`,也会给你强行注入`null`。(**上面的解释有些牵强**)
+
+3. DI容器的耦合
+DI框架的一个核心思想是被管理的类应该不对使用的DI容器产生依赖.换句话说,他应该是一个普通的POJO,他应该能够被独立初始化,只需要你提供给他所需要的依赖,你在一个单元测试中初始化它应该不需要开启DI容器,能够独立测试(使用容器应该更多的是集成测试),如果没有容器耦合,你可以将该类作为托管或非托管类使用，甚至可以切换到一个新的DI框架。但是当你直接注入到字段中,你没有提供直接的方法来实例化这个类和它所有需要的依赖关系。这意味着:
+    1. 有一种方法(通过调用默认的构造函数)，当一个对象缺少一些强制的合作者时，可以在一个状态下使用new创建一个对象，使用时会导致`NullPointerException`。
+    2. 这样的类不能在DI容器（测试，其他模块）之外被重用，因为除了反射，没有办法为它提供所需的依赖关系。
+这里我的理解是如果使用字段的注入方式,只能够使用DI容器来对该组件进行依赖注入,但是别的对象,我们可以使用其它的方法,并不需要必须使用DI容器,`setter`和`constructor`可以传递参数,我们可以在外部类中创建它所需要的对象,之后传递给它.如果我们用了字段注入的方式,那么使用默认构造函数创建它的时候,可能因为缺少必要的组件而产生NPE(`NullPointerException`).
+
+4. 不可变性
+与构造函数不同的是，字段注入不能用于将依赖关系分配给最终字段，这将有效地使你的对象变得可变。
+构造器vsSetter注入应该选择哪个？
+**Setters应该用来注入可选的依赖关系**。当它们没有被提供时，该类应该能够发挥作用。依赖关系可以在对象实例化后随时更改。根据不同的情况，这可能是一个优势。有时，拥有一个不可改变的对象是可取的。有时，在运行时改变对象的合作者是件好事--比如JMX管理的MBeans。
+**构造函数注入对强制依赖有好处**。那些，是对象正常运行所需要的。通过在构造函数中提供这些，你可以确保对象在构造的那一刻就可以使用了。在构造函数中分配的字段也可以是final的，这样可以使对象完全不可变，或者至少保护它的必填字段。
+使用构造函数提供依赖关系的一个后果是，**以这种方式构造的两个对象之间不再可能出现循环依赖关系（与setter注入不同）**。这实际上是一件好事，而不是限制，因为循环依赖应该被避免，而且通常是一个坏设计的标志。这样一来，这样的做法就可以避免了。
+另一个好处是，如果使用spring 4.3+，你可以将你的类与DI框架完全解耦。原因是Spring现在支持隐式构造函数注入一个构造函数的场景。这意味着你的类中不再需要DI注解。当然，你也可以通过在你的spring configs中为给定的类显式配置DI来实现同样的目的，这只是让这一切变得更加简单。
+关于不可变性的解释:
+
+
+#### 为什么我们要使用DI(IoC)?
+1. 可能有许多`Bean`需要一个共同的组件,那么我们如果用传统的方式,不能够实现共享组件。
+2. 实例化一个组件很难,因为你需要的组件可能也需要别的组件,这样的话,就很难。
+
+所以我们使用一个IoC容器来对他们进行管理。
+
+### 小结
+使用Annotation可以大幅简化配置，每个Bean通过`@Component`和`@Autowired`注入；
+必须合理设计包的层次结构，才能发挥`@ComponentScan`的威力。
+
+## 定制Bean
+### Scope
+对于Spring容器来说，当我们把一个Bean标记为`@Component`后，它就会自动为我们创建一个单例（Singleton），即容器初始化时创建Bean，容器关闭前销毁Bean。在容器运行期间，我们调用`getBean(Class)`获取到的Bean总是同一个实例。
+还有一种Bean，我们每次调用`getBean(Class)`，容器都返回一个新的实例，这种Bean称为Prototype（原型），它的生命周期显然和Singleton不同。声明一个Prototype的Bean时，需要添加一个额外的`@Scope`注解：
+```java
+@Component
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE) // @Scope("prototype")
+public class MailSession {
+    ...
+}
+```
+### 注入List
+有些时候，我们会有一系列接口相同，不同实现类的Bean。例如，注册用户时，我们要对email、password和name这3个变量进行验证。为了便于扩展，我们先定义验证接口：
+```java
+public interface Validator {
+    void validate(String email, String password, String name);
+}
+```
+然后，分别使用3个`Validator`对用户参数进行验证：
+```java
+@Component
+public class EmailValidator implements Validator {
+    public void validate(String email, String password, String name) {
+        if (!email.matches("^[a-z0-9]+\\@[a-z0-9]+\\.[a-z]{2,10}$")) {
+            throw new IllegalArgumentException("invalid email: " + email);
+        }
+    }
+}
+
+@Component
+public class PasswordValidator implements Validator {
+    public void validate(String email, String password, String name) {
+        if (!password.matches("^.{6,20}$")) {
+            throw new IllegalArgumentException("invalid password");
+        }
+    }
+}
+
+@Component
+public class NameValidator implements Validator {
+    public void validate(String email, String password, String name) {
+        if (name == null || name.isBlank() || name.length() > 20) {
+            throw new IllegalArgumentException("invalid name: " + name);
+        }
+    }
+}
+```
+最后，我们通过一个`Validators`作为入口进行验证：
+```java
+@Component
+public class Validators {
+    @Autowired
+    List<Validator> validators;
+
+    public void validate(String email, String password, String name) {
+        for (var validator : this.validators) {
+            validator.validate(email, password, name);
+        }
+    }
+}
+```
+注意到`Validators`被注入了一个`List<Validator>`，Spring会自动把所有类型为`Validator`的Bean装配为一个List注入进来，这样一来，我们每新增一个Validator类型，就自动被Spring装配到Validators中了，非常方便。
+因为Spring是通过扫描classpath获取到所有的Bean，而`List`是有序的，要指定`List`中Bean的顺序，可以加上`@Order`注解：
+```java
+@Component
+@Order(1)
+public class EmailValidator implements Validator {
+    ...
+}
+
+@Component
+@Order(2)
+public class PasswordValidator implements Validator {
+    ...
+}
+
+@Component
+@Order(3)
+public class NameValidator implements Validator {
+    ...
+}
+```
+### 可选注入
+默认情况下，当我们标记了一个`@Autowired`后，Spring如果没有找到对应类型的Bean，它会抛出`NoSuchBeanDefinitionException`异常。
+可以给`@Autowired`增加一个`required = false`的参数：
+```java
+@Component
+public class MailService {
+    @Autowired(required = false)
+    ZoneId zoneId = ZoneId.systemDefault();
+    ...
+}
+```
+这个参数告诉Spring容器，如果找到一个类型为ZoneId的Bean，就注入，如果找不到，就忽略。
+这种方式非常适合有定义就使用定义，没有就使用默认值的情况。
+### 创建第三方Bean
+如果一个Bean不在我们自己的package管理之内，例如`ZoneId`，如何创建它？
+答案是我们自己在`@Configuration`类中编写一个Java方法创建并返回它，注意给方法标记一个`@Bean`注解：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    // 创建一个Bean:
+    @Bean
+    ZoneId createZoneId() {
+        return ZoneId.of("Z");
+    }
+}
+```
+Spring对标记为`@Bean`的方法只调用一次，因此返回的Bean仍然是单例。
+### 初始化和销毁
+有些时候，一个Bean在注入必要的依赖后，需要进行初始化（监听消息等）。在容器关闭时，有时候还需要清理资源（关闭连接池等）。我们通常会定义一个`init()`方法进行初始化，定义一个`shutdown()`方法进行清理，然后，引入JSR-250定义的Annotation：
+```xml
+<dependency>
+    <groupId>javax.annotation</groupId>
+    <artifactId>javax.annotation-api</artifactId>
+    <version>1.3.2</version>
+</dependency>
+```
+在Bean的初始化和清理方法上标记`@PostConstruct`和`@PreDestroy`：
+```java
+@Component
+public class MailService {
+    @Autowired(required = false)
+    ZoneId zoneId = ZoneId.systemDefault();
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Init mail service with zoneId = " + this.zoneId);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Shutdown mail service");
+    }
+}
+```
+Spring容器会对上述Bean做如下初始化流程：
+1. 调用构造方法创建`MailService`实例；
+2. 根据`@Autowired`进行注入；
+3. 调用标记有`@PostConstruct`的`init()`方法进行初始化。
+而销毁时，容器会首先调用标记有`@PreDestroy`的`shutdown()`方法。
+Spring只根据Annotation查找**无参数**方法，对方法名不作要求。
+### 使用别名
+默认情况下，对一种类型的Bean，容器只创建一个实例。但有些时候，我们需要对一种类型的Bean创建多个实例。例如，同时连接多个数据库，就必须创建多个`DataSource`实例。
+如果我们在`@Configuration`类中创建了多个同类型的Bean：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    @Bean
+    ZoneId createZoneOfZ() {
+        return ZoneId.of("Z");
+    }
+
+    @Bean
+    ZoneId createZoneOfUTC8() {
+        return ZoneId.of("UTC+08:00");
+    }
+}
+```
+Spring会报`NoUniqueBeanDefinitionException`异常，意思是出现了重复的Bean定义。
+这个时候，需要给每个Bean添加不同的名字：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    @Bean("z")
+    ZoneId createZoneOfZ() {
+        return ZoneId.of("Z");
+    }
+
+    @Bean
+    @Qualifier("utc8")
+    ZoneId createZoneOfUTC8() {
+        return ZoneId.of("UTC+08:00");
+    }
+}
+```
+可以用`@Bean("name")`指定别名，也可以用`@Bean`+`@Qualifier("name")`指定别名。
+存在多个同类型的Bean时，注入`ZoneId`又会报错：
+```java
+NoUniqueBeanDefinitionException: No qualifying bean of type 'java.time.ZoneId' available: expected single matching bean but found 2
+```
+意思是期待找到唯一的`ZoneId`类型Bean，但是找到两。因此，注入时，要指定Bean的名称：
+```java
+@Component
+public class MailService {
+	@Autowired(required = false)
+	@Qualifier("z") // 指定注入名称为"z"的ZoneId
+	ZoneId zoneId = ZoneId.systemDefault();
+    ...
+}
+```
+还有一种方法是把其中某个Bean指定为`@Primary`：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    @Bean
+    @Primary // 指定为主要Bean
+    @Qualifier("z")
+    ZoneId createZoneOfZ() {
+        return ZoneId.of("Z");
+    }
+
+    @Bean
+    @Qualifier("utc8")
+    ZoneId createZoneOfUTC8() {
+        return ZoneId.of("UTC+08:00");
+    }
+}
+```
+这样，在注入时，如果没有指出Bean的名字，Spring会注入标记有`@Primary`的Bean。这种方式也很常用。例如，对于主从两个数据源，通常将主数据源定义为`@Primary`：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    @Bean
+    @Primary
+    DataSource createMasterDataSource() {
+        ...
+    }
+
+    @Bean
+    @Qualifier("slave")
+    DataSource createSlaveDataSource() {
+        ...
+    }
+}
+```
+其他Bean默认注入的就是主数据源。如果要注入从数据源，那么只需要指定名称即可。
+### 使用FactoryBean
+我们在设计模式的工厂方法中讲到，很多时候，可以通过工厂模式创建对象。Spring也提供了工厂模式，允许定义一个工厂，然后由工厂创建真正的Bean。
+用工厂模式创建Bean需要实现`FactoryBean`接口。我们观察下面的代码：
+```java
+@Component
+public class ZoneIdFactoryBean implements FactoryBean<ZoneId> {
+
+    String zone = "Z";
+
+    @Override
+    public ZoneId getObject() throws Exception {
+        return ZoneId.of(zone);
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return ZoneId.class;
+    }
+}
+```
+当一个Bean实现了`FactoryBean`接口后，Spring会先实例化这个工厂，然后调用`getObject()`创建真正的Bean。`getObjectType()`可以指定创建的Bean的类型，因为指定类型不一定与实际类型一致，可以是接口或抽象类。
+因此，如果定义了一个`FactoryBean`，要注意Spring创建的Bean实际上是这个`FactoryBean`的`getObject()`方法返回的Bean。为了和普通Bean区分，我们通常都以XxxFactoryBean命名。
+### 小结
+Spring默认使用Singleton创建Bean，也可指定Scope为Prototype；
+可将相同类型的Bean注入`List`；
+可用`@Autowired(required=false)`允许可选注入；
+可用带`@Bean`标注的方法创建Bean；
+可使用`@PostConstruct`和`@PreDestroy`对Bean进行初始化和清理；
+相同类型的Bean只能有一个指定为`@Primary`，其他必须用`@Quanlifier("beanName")`指定别名；
+注入时，可通过别名`@Quanlifier("beanName")`指定某个Bean；
+可以定义`FactoryBean`来使用工厂模式创建Bean。
+## 使用Resource
+在Java程序中，我们经常会读取配置文件、资源文件等。使用Spring容器时，我们也可以把“文件”注入进来，方便程序读取。
+例如，AppService需要读取logo.txt这个文件，通常情况下，我们需要写很多繁琐的代码，主要是为了定位文件，打开InputStream。
+Spring提供了一个org.springframework.core.io.Resource（注意不是javax.annotation.Resource），它可以像String、int一样使用@Value注入：
+```java
+@Component
+public class AppService {
+    @Value("classpath:/logo.txt")
+    private Resource resource;
+
+    private String logo;
+
+    @PostConstruct
+    public void init() throws IOException {
+        try (var reader = new BufferedReader(
+                new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
+            this.logo = reader.lines().collect(Collectors.joining("\n"));
+        }
+    }
+}
+```
+注入`Resource`最常用的方式是通过classpath，即类似`classpath:/logo.txt`表示在classpath中搜索`logo.txt`文件，然后，我们直接调用`Resource.getInputStream()`就可以获取到输入流，避免了自己搜索文件的代码。
+也可以直接指定文件的路径，例如：
+```java
+@Value("file:/path/to/logo.txt")
+private Resource resource;
+```
+但使用classpath是最简单的方式。上述工程结构如下：
+```
+spring-ioc-resource
+├── pom.xml
+└── src
+    └── main
+        ├── java
+        │   └── com
+        │       └── itranswarp
+        │           └── learnjava
+        │               ├── AppConfig.java
+        │               └── AppService.java
+        └── resources
+            └── logo.txt
+```
+使用Maven的标准目录结构，所有资源文件放入`src/main/resources`即可。
+
+### 小结
+Spring提供了Resource类便于注入资源文件。最常用的注入是通过classpath以`classpath:/path/to/file`的形式注入。
+
+## 注入配置
+在开发应用程序时，经常需要读取配置文件。最常用的配置方法是以`key=value`的形式写在`.properties`文件中。
+例如，`MailService`根据配置的`app.zone=Asia/Shanghai`来决定使用哪个时区。要读取配置文件，我们可以使用上一节讲到的`Resource`来读取位于classpath下的一个`app.properties`文件。但是，这样仍然比较繁琐。
+Spring容器还提供了一个更简单的`@PropertySource`来自动读取配置文件。我们只需要在`@Configuration`配置类上再添加一个注解：
+```java
+@Configuration
+@ComponentScan
+@PropertySource("app.properties") // 表示读取classpath的app.properties
+public class AppConfig {
+    @Value("${app.zone:Z}")
+    String zoneId;
+
+    @Bean
+    ZoneId createZoneId() {
+        return ZoneId.of(zoneId);
+    }
+}
+```
+Spring容器看到@PropertySource("app.properties")注解后，自动读取这个配置文件，然后，我们使用@Value正常注入：
+```java
+@Value("${app.zone:Z}")
+String zoneId;
+```
+注意注入的字符串语法，它的格式如下：
+`"${app.zone}"`表示读取key为`app.zone`的value，如果key不存在，启动将报错；
+`"${app.zone:Z}"`表示读取key为`app.zone`的value，但如果key不存在，就使用默认值`Z`。
+这样一来，我们就可以根据`app.zone`的配置来创建`ZoneId`。
+还可以把注入的注解写到方法参数中：
+```java
+@Bean
+ZoneId createZoneId(@Value("${app.zone:Z}") String zoneId) {
+    return ZoneId.of(zoneId);
+}
+```
+可见，先使用`@PropertySource`读取配置文件，然后通过`@Value`以`${key:defaultValue}`的形式注入，可以极大地简化读取配置的麻烦。
+另一种注入配置的方式是先通过一个简单的JavaBean持有所有的配置，例如，一个`SmtpConfig`：
+```java
+@Component
+public class SmtpConfig {
+    @Value("${smtp.host}")
+    private String host;
+
+    @Value("${smtp.port:25}")
+    private int port;
+
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+}
+```
+然后，在需要读取的地方，使用`#{smtpConfig.host}`注入：
+```java
+@Component
+public class MailService {
+    @Value("#{smtpConfig.host}")
+    private String smtpHost;
+
+    @Value("#{smtpConfig.port}")
+    private int smtpPort;
+}
+```
+注意观察`#{}`这种注入语法，它和`${key}`不同的是，`#{}`表示从JavaBean读取属性。`"#{smtpConfig.host}"`的意思是，从名称为`smtpConfig`的Bean读取`host`属性，即调用`getHost()`方法。一个Class名为`SmtpConfig`的Bean，它在Spring容器中的默认名称就是`smtpConfig`，除非用`@Qualifier`指定了名称。
+使用一个独立的JavaBean持有所有属性，然后在其他Bean中以`#{bean.property}`注入的好处是，多个Bean都可以引用同一个Bean的某个属性。例如，如果SmtpConfig决定从数据库中读取相关配置项，那么`MailService`注入的`@Value("#{smtpConfig.host}")`仍然可以不修改正常运行。
+
+### 小结
+Spring容器可以通过`@PropertySource`自动读取配置，并以`@Value("${key}")`的形式注入；
+可以通过`${key:defaultValue}`指定默认值；
+以`#{bean.property}`形式注入时，Spring容器自动把指定Bean的指定属性值注入。
+
+## 使用条件装配
+开发应用程序时，我们会使用开发环境，例如，使用内存数据库以便快速启动。而运行在生产环境时，我们会使用生产环境，例如，使用MySQL数据库。如果应用程序可以根据自身的环境做一些适配，无疑会更加灵活。
+Spring为应用程序准备了Profile这一概念，用来表示不同的环境。例如，我们分别定义开发、测试和生产这3个环境：
+```
+native
+test
+production
+```
+创建某个Bean时，Spring容器可以根据注解`@Profile`来决定是否创建。例如，以下配置：
+```java
+@Configuration
+@ComponentScan
+public class AppConfig {
+    @Bean
+    @Profile("!test")
+    ZoneId createZoneId() {
+        return ZoneId.systemDefault();
+    }
+
+    @Bean
+    @Profile("test")
+    ZoneId createZoneIdForTest() {
+        return ZoneId.of("America/New_York");
+    }
+}
+```
+如果当前的Profile设置为`test`，则Spring容器会调用`createZoneIdForTest()`创建`ZoneId`，否则，调用`createZoneId()`创建`ZoneId`。注意到`@Profile("!test")`表示非test环境。
+在运行程序时，加上JVM参数`-Dspring.profiles.active=test`就可以指定以`test`环境启动。
+实际上，Spring允许指定多个Profile，例如：
+```java
+-Dspring.profiles.active=test,master
+```
+可以表示`test`环境，并使用`master`分支代码。
+要满足多个Profile条件，可以这样写：
+```java
+@Bean
+@Profile({ "test", "master" }) // 同时满足test和master
+ZoneId createZoneId() {
+    ...
+}
+```
+### 使用Conditional
+除了根据`@Profile`条件来决定是否创建某个Bean外，Spring还可以根据`@Conditional`决定是否创建某个Bean。
+例如，我们对`SmtpMailService`添加如下注解：
+```java
+@Component
+@Conditional(OnSmtpEnvCondition.class)
+public class SmtpMailService implements MailService {
+    ...
+}
+```
+它的意思是，如果满足`OnSmtpEnvCondition`的条件，才会创建`SmtpMailService`这个Bean。`OnSmtpEnvCondition`的条件是什么呢？我们看一下代码：
+```java
+public class OnSmtpEnvCondition implements Condition {
+    public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+        return "true".equalsIgnoreCase(System.getenv("smtp"));
+    }
+}
+```
+因此，`OnSmtpEnvCondition`的条件是存在环境变量`smtp`，值为`true`。这样，我们就可以通过环境变量来控制是否创建`SmtpMailService`。
+Spring只提供了`@Conditional`注解，具体判断逻辑还需要我们自己实现。Spring Boot提供了更多使用起来更简单的条件注解，例如，如果配置文件中存在`app.smtp=true`，则创建`MailService`：
+```java
+@Component
+@ConditionalOnProperty(name="app.smtp", havingValue="true")
+public class MailService {
+    ...
+}
+```
+如果当前classpath中存在类`javax.mail.Transport`，则创建`MailService`：
+```java
+@Component
+@ConditionalOnClass(name = "javax.mail.Transport")
+public class MailService {
+    ...
+}
+```
+后续我们会介绍Spring Boot的条件装配。我们以文件存储为例，假设我们需要保存用户上传的头像，并返回存储路径，在本地开发运行时，我们总是存储到文件：
+```java
+@Component
+@ConditionalOnProperty(name = "app.storage", havingValue = "file", matchIfMissing = true)
+public class FileUploader implements Uploader {
+    ...
+}
+```
+在生产环境运行时，我们会把文件存储到类似AWS S3上：
+```java
+@Component
+@ConditionalOnProperty(name = "app.storage", havingValue = "s3")
+public class S3Uploader implements Uploader {
+    ...
+}
+```
+其他需要存储的服务则注入`Uploader`：
+```java
+@Component
+public class UserImageService {
+    @Autowired
+    Uploader uploader;
+}
+```
+当应用程序检测到配置文件存在`app.storage=s3`时，自动使用`S3Uploader`，如果存在配置`app.storage=file`，或者配置`app.storage`不存在，则使用`FileUploader`。
+可见，使用条件注解，能更灵活地装配Bean。

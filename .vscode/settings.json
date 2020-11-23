@@ -1,6 +1,10 @@
 {
     "cSpell.words": [
         "JDBC",
-        "Servlet"
+        "POJO",
+        "Quanlifier",
+        "Servlet",
+        "classpath",
+        "springframework"
     ]
 }
