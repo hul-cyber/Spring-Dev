@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
         "JDBC",
+        "Joinpoint",
         "POJO",
+        "Pointcut",
         "Quanlifier",
         "Servlet",
         "classpath",
