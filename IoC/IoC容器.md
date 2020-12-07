@@ -4,6 +4,12 @@
 通常来说，使用容器运行组件，除了提供一个组件运行环境之外，容器还提供了许多底层服务。例如，Servlet容器底层实现了TCP连接，解析HTTP协议等非常复杂的服务，如果没有容器来提供这些服务，我们就无法编写像Servlet这样代码简单，功能强大的组件。早期的JavaEE服务器提供的EJB容器最重要的功能就是通过声明式事务服务，使得EJB组件的开发人员不必自己编写冗长的事务处理代码，所以极大地简化了事务处理。
 通常来说，使用容器运行组件，**除了提供一个组件运行环境之外，容器还提供了许多底层服务**。例如，Servlet容器底层实现了TCP连接，解析HTTP协议等非常复杂的服务，如果没有容器来提供这些服务，我们就无法编写像Servlet这样代码简单，功能强大的组件。早期的JavaEE服务器提供的EJB容器最重要的功能就是通过声明式事务服务，使得EJB组件的开发人员不必自己编写冗长的事务处理代码，所以极大地简化了事务处理。
 本章我们讨论的IoC容器，主要介绍Spring容器如何对组件进行生命周期管理和配置组装服务。
+Spring 容器(IoC容器)是 Spring 框架的核心。容器将创建对象，把它们连接在一起，配置它们，并管理他们的整个生命周期从创建到销毁。Spring 容器使用依赖注入（DI）来管理组成一个应用程序的组件。这些对象被称为 Spring Beans。
+通过阅读配置元数据提供的指令，容器知道对哪些对象进行实例化，配置和组装。配置元数据可以通过 XML，Java 注释或 Java 代码来表示(使用`application.xml`和Java注解来完成)。下图是Spring如何工作的高级视图。Spring IoC容器利用Java的POJO类和配置元数据来生成完全配置和可执行的系统或应用程序。
+**IOC 容器**具有依赖注入功能的容器，它可以创建对象，IOC 容器负责实例化、定位、配置应用程序中的对象及建立这些对象间的依赖。通常new一个实例，控制权由程序员控制，**而"控制反转"是指new实例工作不由程序员来做而是交给Spring容器来做**。在Spring中BeanFactory是IOC容器的实际代表者。
+![](2020-11-25-14-29-36.png)
+Spring提供了两个不同类型的容器:`Spring BeanFactory`容器和`Spring ApplicationContext`容器。
+`BeanFactory`和`ApplicationContext`的区别在于，`BeanFactory`的实现是**按需创建，即第一次获取Bean时才创建这个Bean**，而`ApplicationContext`**会一次性创建所有的Bean**。实际上，`ApplicationContext`接口是从`BeanFactory`接口继承而来的，并且，`ApplicationContext`提供了一些额外的功能，包括国际化支持、事件和通知机制等。通常情况下，我们总是使用`ApplicationContext`，很少会考虑使用`BeanFactory`。
 
 ## IoC原理
 Spring提供的容器又称为IoC容器，什么是IoC？
